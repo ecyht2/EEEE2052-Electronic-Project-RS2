@@ -6,14 +6,25 @@ use core::fmt::Write;
 use hd44780_driver::HD44780;
 use panic_rtt_target as _;
 
+use cortex_m::{interrupt::Mutex, peripheral::NVIC};
 use cortex_m_rt::entry;
+
+use panic_rtt_target as _;
 use rtt_target::{rprint, rprintln};
+
+use arrayvec::ArrayString;
+use doppler_radar::comparator::Comparator;
 use stm32l4xx_hal::{
     adc::{Adc, AdcCommon},
     delay::Delay,
     pac,
     prelude::*,
+    timer::Timer,
+    comp::{self, Comp, CompConfig, CompDevice},
 };
+use stm32l4xx_hal::pac::interrupt;
+
+static G_COMP: Mutex<RefCell<Option<Comparator>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -71,6 +82,32 @@ fn main() -> ! {
     lcd.set_cursor_blink(hd44780_driver::CursorBlink::Off, &mut delay)
         .unwrap();
 
+    // Comparator
+    // Comparator
+    let cfg = CompConfig {
+        blanking: comp::BlankingSource::None,
+        hyst: comp::Hysterisis::NoHysterisis,
+        inmsel: comp::InvertingInput::Vref,
+        inpsel: comp::NonInvertingInput::Io2,
+        polarity: comp::OutputPolarity::NotInverted,
+        pwrmode: comp::PowerMode::HighSpeed,
+    };
+    let comparator = Comp::new(CompDevice::One, cfg, &mut rcc.apb2);
+
+    // Timer
+    unsafe { NVIC::unmask(stm32l4xx_hal::stm32::Interrupt::TIM1_UP_TIM16) };
+    let timer = Timer::tim16(dp.TIM16, 16000.Hz(), clocks, &mut rcc.apb2);
+
+    // Comparator Struct
+    let mut comp = Comparator::new(comparator, timer, 16e3);
+
+    // Intitializing
+    comp.start();
+    gpiob.pb2.into_analog(&mut gpiob.moder, &mut gpiob.pupdr);
+
+    // Moving struct to global
+    cortex_m::interrupt::free(|cs| *G_COMP.borrow(cs).borrow_mut() = Some(comp));
+
     // Display Buffer
     let mut buf = ArrayString::<16>::new();
 
@@ -91,4 +128,19 @@ fn main() -> ! {
 
         delay.delay_ms(500 as u16);
     }
+}
+
+#[interrupt]
+fn TIM1_UP_TIM16() {
+    cortex_m::interrupt::free(|cs| {
+        // Moving out comp
+        let mut comp = G_COMP.borrow(cs).replace(None).unwrap();
+
+        // Handle Callback
+        comp.handle_callback();
+        comp.reset_timer();
+
+        // Moving comp back
+        *G_COMP.borrow(cs).borrow_mut() = Some(comp);
+    });
 }

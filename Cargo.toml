@@ -11,7 +11,7 @@ cortex-m = {version = "0.7.7", features = ["critical-section-single-core"]}
 cortex-m-rt = "0.7.3"
 
 # Change this import as required for your MCU.
-stm32l4xx-hal = { version = "0.7.1", features = ["stm32l476"], git = "https://github.com/jspngh/stm32l4xx-hal.git", branch = "feature/L47x-L48x_ADC"}
+stm32l4xx-hal = { version = "0.7.1", features = ["stm32l476"] }
 rtt-target = "0.4.0"
 panic-rtt-target = { version = "0.1.2", features = ["cortex-m"]}
 hd44780-driver = "0.4.0"
