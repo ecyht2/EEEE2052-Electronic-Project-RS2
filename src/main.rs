@@ -26,11 +26,12 @@ use stm32l4xx_hal::pac::interrupt;
 
 // Global Variables
 static G_COMP: Mutex<RefCell<Option<Comparator>>> = Mutex::new(RefCell::new(None));
+static G_ADC: Mutex<RefCell<Option<ADC>>> = Mutex::new(RefCell::new(None));
 
 // Constants
 const _ADC_BUF_LEN: u16 = 4096;
 const CLOCK_FREQUENCY: u32 = 16000;
-const _TRANSMITTED_FREQUENCY: f32 = 10.525e9;
+const TRANSMITTED_FREQUENCY: f32 = 10.525e9;
 
 #[entry]
 fn main() -> ! {
@@ -57,7 +58,7 @@ fn main() -> ! {
 
     // LCD Buttons
     let adc_common = AdcCommon::new(dp.ADC_COMMON, &mut rcc.ahb2);
-    let mut adc = Adc::adc1(dp.ADC1, adc_common, &mut rcc.ccipr, &mut delay);
+    let mut button_adc = Adc::adc1(dp.ADC1, adc_common, &mut rcc.ccipr, &mut delay);
     let mut a2 = gpioa.pa0.into_analog(&mut gpioa.moder, &mut gpioa.pupdr);
 
     // LCD
@@ -117,6 +118,12 @@ fn main() -> ! {
 
     // Moving struct to global
     cortex_m::interrupt::free(|cs| *G_COMP.borrow(cs).borrow_mut() = Some(comp));
+
+    // ADC
+    let adc = ADC::new();
+
+    // Moving struct to global
+    cortex_m::interrupt::free(|cs| *G_ADC.borrow(cs).borrow_mut() = Some(adc));
 
     // Display Buffer
     let mut buf = ArrayString::<16>::new();
