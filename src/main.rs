@@ -131,7 +131,7 @@ fn main() -> ! {
     let mut sampling_mode = LCDButtons::UP;
     let mut units_mode = LCDButtons::RIGHT;
     let mut current_frequency = 0.0;
-    let mut current_speed = 0.0;
+    let mut current_speed;
 
     rprintln!(" done.");
 
@@ -160,7 +160,6 @@ fn main() -> ! {
                     // Moving adc back
                     *G_ADC.borrow(cs).borrow_mut() = Some(adc);
                 });
-                core::write!(row1, "COMP f: ").unwrap();
                 sampling_mode = LCDButtons::DOWN;
             }
             LCDButtons::UP if sampling_mode != LCDButtons::UP => {
@@ -182,16 +181,13 @@ fn main() -> ! {
                     // Moving adc back
                     *G_ADC.borrow(cs).borrow_mut() = Some(adc);
                 });
-                core::write!(row1, "ADC f: ").unwrap();
                 sampling_mode = LCDButtons::UP;
             }
             LCDButtons::RIGHT if units_mode != LCDButtons::RIGHT => {
                 units_mode = LCDButtons::RIGHT;
-                core::write!(row2, "kmph: ").unwrap();
             }
             LCDButtons::LEFT if units_mode != LCDButtons::LEFT => {
                 units_mode = LCDButtons::LEFT;
-                core::write!(row2, "mph: ").unwrap();
             }
             _ => (),
         };
@@ -207,7 +203,8 @@ fn main() -> ! {
                 // Moving comp back
                 *G_COMP.borrow(cs).borrow_mut() = Some(comp);
             });
-            core::write!(row1, "{:<8}", current_frequency).unwrap();
+            // Does not work after 1000 (maybe fix?)
+            core::write!(row1, "COMP f: {:<8.4}", current_frequency).unwrap_or_default();
         } else if sampling_mode == LCDButtons::UP {
             cortex_m::interrupt::free(|cs| {
                 // Moving out adc
@@ -218,16 +215,19 @@ fn main() -> ! {
                 // Moving adc back
                 *G_ADC.borrow(cs).borrow_mut() = Some(adc);
             });
-            core::write!(row1, "{:<9}", current_frequency).unwrap();
+            // Does not work after 1000 (maybe fix?)
+            core::write!(row1, "ADC f: {:<9.5}", current_frequency).unwrap_or_default();
         }
 
         // Calculating Speeds
         if units_mode == LCDButtons::RIGHT {
             current_speed = utilities::calculate_speed(current_frequency, TRANSMITTED_FREQUENCY);
-            core::write!(row2, "{:<10}", current_speed).unwrap();
+            // Does not work after 1000 (maybe fix?)
+            core::write!(row2, "kmph: {:<10.6}", current_speed).unwrap_or_default();
         } else if units_mode == LCDButtons::LEFT {
             current_speed = utilities::calculate_speed_mph(current_frequency, TRANSMITTED_FREQUENCY);
-            core::write!(row2, "{:<11}", current_speed).unwrap();
+            // Does not work after 1000 (maybe fix?)
+            core::write!(row2, "mph: {:<11.7}", current_speed).unwrap_or_default();
         }
 
         // Printing to LCD
