@@ -24,16 +24,24 @@ use stm32l4xx_hal::{
 };
 use stm32l4xx_hal::pac::interrupt;
 
+// Global Variables
 static G_COMP: Mutex<RefCell<Option<Comparator>>> = Mutex::new(RefCell::new(None));
+
+// Constants
+const _ADC_BUF_LEN: u16 = 4096;
+const CLOCK_FREQUENCY: u32 = 16000;
+const _TRANSMITTED_FREQUENCY: f32 = 10.525e9;
 
 #[entry]
 fn main() -> ! {
     rtt_target::rtt_init_print!();
     rprint!("Initializing...");
 
+    // Setting Up Peripherals
     let cp = pac::CorePeripherals::take().unwrap();
     let dp = pac::Peripherals::take().unwrap();
 
+    // Setting Up Clock
     let mut rcc = dp.RCC.constrain();
     let mut flash = dp.FLASH.constrain();
     let mut pwr = dp.PWR.constrain(&mut rcc.apb1r1);
@@ -42,6 +50,7 @@ fn main() -> ! {
 
     let mut delay = Delay::new(cp.SYST, clocks);
 
+    // Setting Up GPIO
     let mut gpioc = dp.GPIOC.split(&mut rcc.ahb2);
     let mut gpioa = dp.GPIOA.split(&mut rcc.ahb2);
     let mut gpiob = dp.GPIOB.split(&mut rcc.ahb2);
@@ -75,6 +84,7 @@ fn main() -> ! {
     )
     .unwrap();
 
+    // Setting Up LCD
     lcd.reset(&mut delay).unwrap();
     lcd.clear(&mut delay).unwrap();
     lcd.set_cursor_visibility(hd44780_driver::Cursor::Invisible, &mut delay)
@@ -96,10 +106,10 @@ fn main() -> ! {
 
     // Timer
     unsafe { NVIC::unmask(stm32l4xx_hal::stm32::Interrupt::TIM1_UP_TIM16) };
-    let timer = Timer::tim16(dp.TIM16, 16000.Hz(), clocks, &mut rcc.apb2);
+    let timer = Timer::tim16(dp.TIM16, CLOCK_FREQUENCY.Hz(), clocks, &mut rcc.apb2);
 
     // Comparator Struct
-    let mut comp = Comparator::new(comparator, timer, 16e3);
+    let mut comp = Comparator::new(comparator, timer, CLOCK_FREQUENCY as f32);
 
     // Intitializing
     comp.start();
@@ -124,9 +134,10 @@ fn main() -> ! {
         lcd.write_str(&buf, &mut delay).unwrap();
 
         // Clearing Buffer
-        buf.clear();
+        row1.clear();
+        row2.clear();
 
-        delay.delay_ms(500 as u16);
+        delay.delay_ms(500_u32);
     }
 }
 
