@@ -21,7 +21,7 @@ pub fn calculate_speed_mph(detected: f32, transmitted: f32) -> f32 {
 /// the first 4 bits of the number represents the 10s and the last 4
 /// bits of number represents the 1s.
 //
-/// If the number given is greater than 99 0 will be returned.
+/// If the number given is greater than 99 an error will be returned.
 //
 /// It uses the Double dabble algorithm to convert a binary number
 /// to BCD.
