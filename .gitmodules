@@ -1,0 +1,4 @@
+[submodule "stm32l4xx-hal"]
+	path = stm32l4xx-hal
+	url = https://github.com/ecyht2/stm32l4xx-hal.git
+	branch = electronics-project
