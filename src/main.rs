@@ -1,10 +1,8 @@
 #![no_main]
 #![no_std]
 
-use arrayvec::ArrayString;
-use core::fmt::Write;
+use core::{cell::RefCell, fmt::Write};
 use hd44780_driver::HD44780;
-use panic_rtt_target as _;
 
 use cortex_m::{interrupt::Mutex, peripheral::NVIC};
 use cortex_m_rt::entry;
@@ -13,16 +11,17 @@ use panic_rtt_target as _;
 use rtt_target::{rprint, rprintln};
 
 use arrayvec::ArrayString;
-use doppler_radar::comparator::Comparator;
+
+use doppler_radar::{comparator::Comparator, LCDButtons, utilities, ADC};
+
 use stm32l4xx_hal::{
     adc::{Adc, AdcCommon},
+    comp::{self, Comp, CompConfig, CompDevice},
     delay::Delay,
-    pac,
+    pac::{self, interrupt},
     prelude::*,
     timer::Timer,
-    comp::{self, Comp, CompConfig, CompDevice},
 };
-use stm32l4xx_hal::pac::interrupt;
 
 // Global Variables
 static G_COMP: Mutex<RefCell<Option<Comparator>>> = Mutex::new(RefCell::new(None));
@@ -126,21 +125,120 @@ fn main() -> ! {
     cortex_m::interrupt::free(|cs| *G_ADC.borrow(cs).borrow_mut() = Some(adc));
 
     // Display Buffer
-    let mut buf = ArrayString::<16>::new();
+    let mut row1 = ArrayString::<16>::new();
+    let mut row2 = ArrayString::<16>::new();
+    // LCD Variables
+    let mut sampling_mode = LCDButtons::UP;
+    let mut units_mode = LCDButtons::RIGHT;
+    let mut current_frequency = 0.0;
+    let mut current_speed = 0.0;
 
     rprintln!(" done.");
 
     loop {
-        let value = adc.read(&mut a2).unwrap();
-        core::write!(buf, "Reading: {}", value).unwrap();
-        rprintln!("Value: {}", value);
+        let value = button_adc.read(&mut a2).unwrap();
+        let current_button = LCDButtons::new(value).unwrap();
+
+        // Setting Mode
+        match current_button {
+            LCDButtons::DOWN if sampling_mode != LCDButtons::DOWN => {
+                cortex_m::interrupt::free(|cs| {
+                    // Moving out comp
+                    let mut comp = G_COMP.borrow(cs).replace(None).unwrap();
+
+                    comp.start();
+
+                    // Moving comp back
+                    *G_COMP.borrow(cs).borrow_mut() = Some(comp);
+                });
+                cortex_m::interrupt::free(|cs| {
+                    // Moving out adc
+                    let mut adc = G_ADC.borrow(cs).replace(None).unwrap();
+
+                    adc.stop();
+
+                    // Moving adc back
+                    *G_ADC.borrow(cs).borrow_mut() = Some(adc);
+                });
+                core::write!(row1, "COMP f: ").unwrap();
+                sampling_mode = LCDButtons::DOWN;
+            }
+            LCDButtons::UP if sampling_mode != LCDButtons::UP => {
+                cortex_m::interrupt::free(|cs| {
+                    // Moving out comp
+                    let mut comp = G_COMP.borrow(cs).replace(None).unwrap();
+
+                    comp.stop();
+
+                    // Moving comp back
+                    *G_COMP.borrow(cs).borrow_mut() = Some(comp);
+                });
+                cortex_m::interrupt::free(|cs| {
+                    // Moving out adc
+                    let mut adc = G_ADC.borrow(cs).replace(None).unwrap();
+
+                    adc.start();
+
+                    // Moving adc back
+                    *G_ADC.borrow(cs).borrow_mut() = Some(adc);
+                });
+                core::write!(row1, "ADC f: ").unwrap();
+                sampling_mode = LCDButtons::UP;
+            }
+            LCDButtons::RIGHT if units_mode != LCDButtons::RIGHT => {
+                units_mode = LCDButtons::RIGHT;
+                core::write!(row2, "kmph: ").unwrap();
+            }
+            LCDButtons::LEFT if units_mode != LCDButtons::LEFT => {
+                units_mode = LCDButtons::LEFT;
+                core::write!(row2, "mph: ").unwrap();
+            }
+            _ => (),
+        };
+
+        // Getting Frequency
+        if sampling_mode == LCDButtons::DOWN {
+            cortex_m::interrupt::free(|cs| {
+                // Moving out comp
+                let comp = G_COMP.borrow(cs).replace(None).unwrap();
+
+                current_frequency = comp.calculate_frequency();
+
+                // Moving comp back
+                *G_COMP.borrow(cs).borrow_mut() = Some(comp);
+            });
+            core::write!(row1, "{:<8}", current_frequency).unwrap();
+        } else if sampling_mode == LCDButtons::UP {
+            cortex_m::interrupt::free(|cs| {
+                // Moving out adc
+                let adc = G_ADC.borrow(cs).replace(None).unwrap();
+
+                current_frequency = adc.calculate_frequency();
+
+                // Moving adc back
+                *G_ADC.borrow(cs).borrow_mut() = Some(adc);
+            });
+            core::write!(row1, "{:<9}", current_frequency).unwrap();
+        }
+
+        // Calculating Speeds
+        if units_mode == LCDButtons::RIGHT {
+            current_speed = utilities::calculate_speed(current_frequency, TRANSMITTED_FREQUENCY);
+            core::write!(row2, "{:<10}", current_speed).unwrap();
+        } else if units_mode == LCDButtons::LEFT {
+            current_speed = utilities::calculate_speed_mph(current_frequency, TRANSMITTED_FREQUENCY);
+            core::write!(row2, "{:<11}", current_speed).unwrap();
+        }
 
         // Printing to LCD
+        // Row 1
         lcd.set_cursor_pos(0, &mut delay).unwrap();
-        lcd.clear(&mut delay).unwrap();
-        lcd.write_str(&buf, &mut delay).unwrap();
+        lcd.write_str(&row1, &mut delay).unwrap();
+        // Row 2
+        lcd.set_cursor_pos(40, &mut delay).unwrap();
+        lcd.write_str(&row2, &mut delay).unwrap();
 
-        // Clearing Buffer
+        // Clearing Buffers
         row1.clear();
         row2.clear();
 
