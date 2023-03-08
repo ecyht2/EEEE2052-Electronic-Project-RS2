@@ -12,7 +12,7 @@ use rtt_target::{rprint, rprintln};
 
 use arrayvec::ArrayString;
 
-use doppler_radar::{comparator::Comparator, LCDButtons, utilities, ADC};
+use doppler_radar::{comparator::Comparator, utilities, LCDButtons, ADC};
 
 use stm32l4xx_hal::{
     adc::{Adc, AdcCommon},
@@ -225,7 +225,8 @@ fn main() -> ! {
             // Does not work after 1000 (maybe fix?)
             core::write!(row2, "kmph: {:<10.6}", current_speed).unwrap_or_default();
         } else if units_mode == LCDButtons::LEFT {
-            current_speed = utilities::calculate_speed_mph(current_frequency, TRANSMITTED_FREQUENCY);
+            current_speed =
+                utilities::calculate_speed_mph(current_frequency, TRANSMITTED_FREQUENCY);
             // Does not work after 1000 (maybe fix?)
             core::write!(row2, "mph: {:<11.7}", current_speed).unwrap_or_default();
         }
