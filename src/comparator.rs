@@ -66,11 +66,6 @@ impl Comparator {
 
     /// Calculates the frequency measured by the comparator.
     pub fn calculate_frequency(&self) -> f32 {
-        let freq = self.timer_frequency * self.ticks as f32 / self.clock_ticks as f32 / 2.0;
-        if freq.is_nan() {
-            0.0
-        } else {
-            freq
-        }
+        self.timer_frequency * self.ticks as f32 / self.clock_ticks as f32 / 2.0
     }
 }
