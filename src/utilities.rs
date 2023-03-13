@@ -1,3 +1,4 @@
+//! Utility functions to help make more modular code.
 const C: f32 = 1080000000.0;
 const C_MPH: f32 = 671000000.0;
 
@@ -23,9 +24,8 @@ pub fn calculate_speed_mph(detected: f32, transmitted: f32) -> f32 {
 //
 /// If the number given is greater than 99 None will be returned.
 //
-/// It uses the Double dabble algorithm to convert a binary number
+/// It uses the [Double dabble algorithm](https://en.wikipedia.org/wiki/Double_dabble) to convert a binary number
 /// to BCD.
-/// https://en.wikipedia.org/wiki/Double_dabble
 pub fn bin_to_bcd(mut number: u8) -> Option<u8> {
     let mut result = 0;
 

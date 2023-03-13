@@ -1,3 +1,4 @@
+//! Liquid Crystal Display (LCD).
 #[derive(Debug, PartialEq)]
 /// Buttons on the Arduino Uno LCD keypad shield.
 pub enum LCDButtons {
