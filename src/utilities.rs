@@ -21,17 +21,17 @@ pub fn calculate_speed_mph(detected: f32, transmitted: f32) -> f32 {
 /// the first 4 bits of the number represents the 10s and the last 4
 /// bits of number represents the 1s.
 //
-/// If the number given is greater than 99 an error will be returned.
+/// If the number given is greater than 99 None will be returned.
 //
 /// It uses the Double dabble algorithm to convert a binary number
 /// to BCD.
 /// https://en.wikipedia.org/wiki/Double_dabble
-pub fn bin_to_bcd(mut number: u8) -> Result<u8, ()> {
+pub fn bin_to_bcd(mut number: u8) -> Option<u8> {
     let mut result = 0;
 
     // Returning 0 if number is 100 or above
     if number > 99 {
-        return Err(());
+        return None;
     }
 
     while number > 0 {
@@ -60,5 +60,5 @@ pub fn bin_to_bcd(mut number: u8) -> Result<u8, ()> {
         result = result << 1;
     }
 
-    Ok(result)
+    Some(result)
 }
