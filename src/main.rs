@@ -159,45 +159,13 @@ fn main() -> ! {
         // Setting Mode
         match current_button {
             LCDButtons::DOWN if sampling_mode != LCDButtons::DOWN => {
-                cortex_m::interrupt::free(|cs| {
-                    // Moving out comp
-                    let mut comp = G_COMP.borrow(cs).replace(None).unwrap();
-
-                    comp.start();
-
-                    // Moving comp back
-                    *G_COMP.borrow(cs).borrow_mut() = Some(comp);
-                });
-                cortex_m::interrupt::free(|cs| {
-                    // Moving out adc
-                    let mut adc = G_ADC.borrow(cs).replace(None).unwrap();
-
-                    adc.stop();
-
-                    // Moving adc back
-                    *G_ADC.borrow(cs).borrow_mut() = Some(adc);
-                });
+                utilities::use_global(&G_COMP, |comp| comp.start());
+                utilities::use_global(&G_ADC, |adc| adc.stop());
                 sampling_mode = LCDButtons::DOWN;
             }
             LCDButtons::UP if sampling_mode != LCDButtons::UP => {
-                cortex_m::interrupt::free(|cs| {
-                    // Moving out comp
-                    let mut comp = G_COMP.borrow(cs).replace(None).unwrap();
-
-                    comp.stop();
-
-                    // Moving comp back
-                    *G_COMP.borrow(cs).borrow_mut() = Some(comp);
-                });
-                cortex_m::interrupt::free(|cs| {
-                    // Moving out adc
-                    let mut adc = G_ADC.borrow(cs).replace(None).unwrap();
-
-                    adc.start();
-
-                    // Moving adc back
-                    *G_ADC.borrow(cs).borrow_mut() = Some(adc);
-                });
+                utilities::use_global(&G_COMP, |comp| comp.stop());
+                utilities::use_global(&G_ADC, |adc| adc.start());
                 sampling_mode = LCDButtons::UP;
             }
             LCDButtons::RIGHT if units_mode != LCDButtons::RIGHT => {
@@ -211,26 +179,14 @@ fn main() -> ! {
 
         // Getting Frequency
         if sampling_mode == LCDButtons::DOWN {
-            cortex_m::interrupt::free(|cs| {
-                // Moving out comp
-                let comp = G_COMP.borrow(cs).replace(None).unwrap();
-
-                current_frequency = comp.calculate_frequency();
-
-                // Moving comp back
-                *G_COMP.borrow(cs).borrow_mut() = Some(comp);
+            utilities::use_global(&G_COMP, |comp| {
+                current_frequency = comp.calculate_frequency()
             });
             // Does not work after 1000 (maybe fix?)
             core::write!(row1, "COMP f: {:<8.4}", current_frequency).unwrap_or_default();
         } else if sampling_mode == LCDButtons::UP {
-            cortex_m::interrupt::free(|cs| {
-                // Moving out adc
-                let mut adc = G_ADC.borrow(cs).replace(None).unwrap();
-
-                current_frequency = adc.calculate_frequency(true);
-
-                // Moving adc back
-                *G_ADC.borrow(cs).borrow_mut() = Some(adc);
+            utilities::use_global(&G_ADC, |adc| {
+                current_frequency = adc.calculate_frequency(true)
             });
             // Does not work after 1000 (maybe fix?)
             core::write!(row1, "ADC f: {:<9.5}", current_frequency).unwrap_or_default();
@@ -266,29 +222,13 @@ fn main() -> ! {
 
 #[interrupt]
 fn TIM1_UP_TIM16() {
-    cortex_m::interrupt::free(|cs| {
-        // Moving out comp
-        let mut comp = G_COMP.borrow(cs).replace(None).unwrap();
-
-        // Handle Callback
+    utilities::use_global(&G_COMP, |comp| {
         comp.handle_callback();
         comp.reset_timer();
-
-        // Moving comp back
-        *G_COMP.borrow(cs).borrow_mut() = Some(comp);
     });
 }
 
 #[interrupt]
 fn DMA1_CH1() {
-    cortex_m::interrupt::free(|cs| {
-        // Moving out comp
-        let mut comp = G_ADC.borrow(cs).replace(None).unwrap();
-
-        // Handle Callback
-        comp.handle_callback();
-
-        // Moving comp back
-        *G_ADC.borrow(cs).borrow_mut() = Some(comp);
-    });
+    utilities::use_global(&G_ADC, |adc| adc.handle_callback());
 }

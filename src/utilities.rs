@@ -1,4 +1,8 @@
 //! Utility functions to help make more modular code.
+
+use core::cell::RefCell;
+
+use cortex_m::interrupt::Mutex;
 const C: f32 = 1080000000.0;
 const C_MPH: f32 = 671000000.0;
 
@@ -61,4 +65,19 @@ pub fn bin_to_bcd(mut number: u8) -> Option<u8> {
     }
 
     Some(result)
+}
+
+pub fn use_global<T, F>(var: &'static Mutex<RefCell<Option<T>>>, mut f: F) -> ()
+where
+    F: FnMut(&mut T),
+{
+    cortex_m::interrupt::free(|cs| {
+        // Moving out comp
+        let mut output: T = var.borrow(cs).replace(None).unwrap();
+
+        f(&mut output);
+
+        // Moving comp back
+        *var.borrow(cs).borrow_mut() = Some(output);
+    });
 }
