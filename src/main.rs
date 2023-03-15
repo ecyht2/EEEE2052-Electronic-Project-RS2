@@ -15,7 +15,7 @@ use arrayvec::ArrayString;
 use doppler_radar::{comparator::Comparator, utilities, LCDButtons, ADC};
 
 use stm32l4xx_hal::{
-    adc::{Adc, AdcCommon},
+    adc::{Adc, AdcCommon, SampleTime, Sequence},
     comp::{self, Comp, CompConfig, CompDevice},
     delay::Delay,
     pac::{self, interrupt},
@@ -28,7 +28,7 @@ static G_COMP: Mutex<RefCell<Option<Comparator>>> = Mutex::new(RefCell::new(None
 static G_ADC: Mutex<RefCell<Option<ADC>>> = Mutex::new(RefCell::new(None));
 
 // Constants
-const _ADC_BUF_LEN: u16 = 4096;
+const ADC_BUF_LEN: usize = 4096;
 const CLOCK_FREQUENCY: u32 = 16000;
 const TRANSMITTED_FREQUENCY: f32 = 10.525e9;
 
@@ -55,9 +55,12 @@ fn main() -> ! {
     let mut gpioa = dp.GPIOA.split(&mut rcc.ahb2);
     let mut gpiob = dp.GPIOB.split(&mut rcc.ahb2);
 
+    // DMA
+    let dma_channels = dp.DMA1.split(&mut rcc.ahb1);
+
     // LCD Buttons
     let adc_common = AdcCommon::new(dp.ADC_COMMON, &mut rcc.ahb2);
-    let mut button_adc = Adc::adc1(dp.ADC1, adc_common, &mut rcc.ccipr, &mut delay);
+    let mut button_adc = Adc::adc2(dp.ADC2, adc_common.clone(), &mut rcc.ccipr, &mut delay);
     let mut a2 = gpioa.pa0.into_analog(&mut gpioa.moder, &mut gpioa.pupdr);
 
     // LCD
@@ -109,17 +112,29 @@ fn main() -> ! {
     let timer = Timer::tim16(dp.TIM16, CLOCK_FREQUENCY.Hz(), clocks, &mut rcc.apb2);
 
     // Comparator Struct
-    let mut comp = Comparator::new(comparator, timer, CLOCK_FREQUENCY as f32);
+    let comp = Comparator::new(comparator, timer, CLOCK_FREQUENCY as f32);
 
     // Intitializing
-    comp.start();
     gpiob.pb2.into_analog(&mut gpiob.moder, &mut gpiob.pupdr);
 
     // Moving struct to global
     cortex_m::interrupt::free(|cs| *G_COMP.borrow(cs).borrow_mut() = Some(comp));
 
     // ADC
-    let adc = ADC::new();
+    let frequency_adc = Adc::adc1(dp.ADC1, adc_common, &mut rcc.ccipr, &mut delay);
+    let adc_pin = gpioc.pc3.into_analog(&mut gpioc.moder, &mut gpioc.pupdr);
+    static mut ADC_BUF: [u16; ADC_BUF_LEN] = [0u16; ADC_BUF_LEN];
+
+    // Setting up ADC
+    let mut adc = ADC::new(
+        frequency_adc,
+        unsafe { &mut ADC_BUF },
+        adc_pin,
+        dma_channels.1,
+        SampleTime::Cycles12_5,
+        4.94,
+    );
+    adc.start();
 
     // Moving struct to global
     cortex_m::interrupt::free(|cs| *G_ADC.borrow(cs).borrow_mut() = Some(adc));
@@ -136,7 +151,9 @@ fn main() -> ! {
     rprintln!(" done.");
 
     loop {
-        let value = button_adc.read(&mut a2).unwrap();
+        button_adc.configure_sequence(&mut a2, Sequence::One, SampleTime::default());
+        button_adc.start_conversion();
+        let value = button_adc.current_sample();
         let current_button = LCDButtons::new(value).unwrap();
 
         // Setting Mode
@@ -208,9 +225,9 @@ fn main() -> ! {
         } else if sampling_mode == LCDButtons::UP {
             cortex_m::interrupt::free(|cs| {
                 // Moving out adc
-                let adc = G_ADC.borrow(cs).replace(None).unwrap();
+                let mut adc = G_ADC.borrow(cs).replace(None).unwrap();
 
-                current_frequency = adc.calculate_frequency();
+                current_frequency = adc.calculate_frequency(true);
 
                 // Moving adc back
                 *G_ADC.borrow(cs).borrow_mut() = Some(adc);
@@ -259,5 +276,19 @@ fn TIM1_UP_TIM16() {
 
         // Moving comp back
         *G_COMP.borrow(cs).borrow_mut() = Some(comp);
+    });
+}
+
+#[interrupt]
+fn DMA1_CH1() {
+    cortex_m::interrupt::free(|cs| {
+        // Moving out comp
+        let mut comp = G_ADC.borrow(cs).replace(None).unwrap();
+
+        // Handle Callback
+        comp.handle_callback();
+
+        // Moving comp back
+        *G_ADC.borrow(cs).borrow_mut() = Some(comp);
     });
 }

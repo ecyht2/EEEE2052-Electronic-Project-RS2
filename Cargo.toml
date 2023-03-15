@@ -16,6 +16,7 @@ stm32l4xx-hal = { version = "0.7.1", features = ["stm32l476"], path = "./stm32l4
 rtt-target = "0.4.0"
 panic-rtt-target = { version = "0.1.2", features = ["cortex-m"]}
 hd44780-driver = "0.4.0"
+microfft = "0.5.0"
 
 # cargo build/run
 [profile.dev]
